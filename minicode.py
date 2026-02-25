@@ -5,12 +5,23 @@
 # 当前使用 urllib 导致:
 # - 消息格式需要手动转换，容易出错
 # - tool_calls 响应格式不正确
+# - JSON 解析失败时无法自动修复或重试
+#
+# TODO: 考虑使用 json-pair 库做 JSON 修复
+# 当 LLM 返回的 arguments 不是标准 JSON 时，可以尝试修复
+#
+# TODO: 修复失败后，将错误信息返回给 LLM 重新生成答案
+# 实现一个修复-重试机制，提高容错性
 
 import glob as globlib, json, os, re, subprocess, urllib.request, urllib.error
 from dotenv import load_dotenv
 
 OPENROUTER_KEY = os.environ.get("OPENROUTER_API_KEY")
 API_URL = "https://openrouter.ai/api/v1/messages" if OPENROUTER_KEY else "https://api.anthropic.com/v1/messages"
+
+# TODO: 模型选择影响 function calling 成功率
+# 推荐使用最新推理模型 (o1/o3/o4, Claude 3.7 Sonnet)
+# 这类模型在 JSON 格式输出上更规范，function calling 错误率更低
 MODEL = os.environ.get("MODEL", "anthropic/claude-opus-4.5" if OPENROUTER_KEY else "claude-opus-4-5")
 API_PROVIDER = "anthropic"  # 默认使用 Anthropic 格式
 
@@ -171,6 +182,13 @@ def run_tool(name, args):
 
 
 def make_schema(provider=None):
+    # TODO: 添加 strict: true 模式
+    # Anthropic 支持在 input_schema 中设置 strict: true
+    # 这会强制模型严格按照 schema 输出参数，减少格式错误
+    # 参考: https://docs.anthropic.com/en/docs/tool-use/guides/constraining-outputs
+    #
+    # TODO: 优化 prompt，给出更多 examples 来引导模型正确输出 JSON
+    # 可以在 system prompt 中添加 few-shot examples
     if provider is None:
         provider = API_PROVIDER
 
@@ -279,6 +297,10 @@ def render_markdown(text):
 
 def parse_response(response):
     """解析不同 API 的响应格式"""
+    # TODO: 处理 JSON 解析失败的情况
+    # 当前直接用 json.loads() 解析 function arguments，
+    # 如果模型返回截断/损坏的 JSON 会直接报错
+    # 考虑: 1) json-pair 修复 2) 正则提取降级 3) 失败重试
     if API_PROVIDER == "anthropic":
         # Anthropic 格式：response["content"] 是数组
         return response.get("content", [])
