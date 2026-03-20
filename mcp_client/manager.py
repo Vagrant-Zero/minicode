@@ -40,19 +40,19 @@ class MCPClient:
         self._lock = threading.Lock()
 
     def connect(self) -> bool:
-        """测试连接，返回是否可用"""
+        """建立连接，返回是否成功"""
         transport = self.config.get("transport", "stdio")
 
         if transport == "stdio":
-            return self._test_stdio_connection()
+            return self._connect_stdio()
         elif transport == "sse":
-            return self._test_sse_connection()
+            return self._connect_sse()
         else:
             print(f"[MCP] Unknown transport '{transport}' for {self.name}")
             return False
 
-    def _test_stdio_connection(self) -> bool:
-        """测试 stdio 连接"""
+    def _connect_stdio(self) -> bool:
+        """建立 stdio 连接"""
         command = self.config.get("command")
         args = self.config.get("args", [])
         env = self.config.get("env")
@@ -60,7 +60,7 @@ class MCPClient:
         if not command:
             return False
 
-        async def test():
+        async def connect():
             from mcp import ClientSession, StdioServerParameters
             from mcp.client.stdio import stdio_client
 
@@ -76,13 +76,13 @@ class MCPClient:
                         await session.initialize()
                         return True
             except Exception as e:
-                print(f"[MCP] Connection test failed for {self.name}: {e}")
+                print(f"[MCP] Connection failed for {self.name}: {e}")
                 return False
 
-        return asyncio.run(test())
+        return asyncio.run(connect())
 
-    def _test_sse_connection(self) -> bool:
-        """测试 SSE 连接"""
+    def _connect_sse(self) -> bool:
+        """建立 SSE 连接"""
         print(f"[MCP] SSE not implemented for {self.name}")
         return False
 
@@ -184,7 +184,7 @@ class MCPManager:
                 print(f"[MCP] {name} is disabled, skipping")
                 continue
 
-            print(f"[MCP] Testing connection to {name}...")
+            print(f"[MCP] Connecting to {name}...")
             client = MCPClient(name, config)
             if client.connect():
                 self.clients[name] = client

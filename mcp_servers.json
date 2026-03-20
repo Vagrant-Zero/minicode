@@ -8,7 +8,7 @@
       "command": "uv",
       "args": [
         "--directory",
-        "/path/to/mcp-weather",
+        "../mcp-weather",
         "run",
         "weather.py"
       ]
