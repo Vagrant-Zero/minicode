@@ -45,6 +45,8 @@ from queue import Queue
 from anthropic import Anthropic
 from dotenv import load_dotenv
 
+from mcp_client import init_mcp, get_mcp_manager
+
 load_dotenv(override=True)
 if os.getenv("ANTHROPIC_BASE_URL"):
     os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
@@ -546,6 +548,11 @@ BG = BackgroundManager()
 BUS = MessageBus()
 TEAM = TeammateManager(BUS, TASK_MGR)
 
+# === SECTION: mcp ===
+MCP_MGR = get_mcp_manager()
+MCP_MGR.connect_all()
+MCP_TOOLS = MCP_MGR.list_all_tools()
+
 # === SECTION: system_prompt ===
 SYSTEM = f"""You are a coding agent at {WORKDIR}. Use tools to solve tasks.
 Prefer task_create/task_update/task_list for multi-step work. Use TodoWrite for short checklists.
@@ -571,6 +578,16 @@ def handle_plan_review(request_id: str, approve: bool, feedback: str = "") -> st
 
 
 # === SECTION: tool_dispatch  ===
+def mcp_call_tool(name: str, arguments: dict) -> str:
+    """MCP 工具调用包装函数"""
+    return MCP_MGR.call_tool(name, arguments)
+
+# 构建 MCP 工具处理器
+def make_mcp_handler(tool_name: str):
+    return lambda **kw: mcp_call_tool(tool_name, kw)
+
+mcp_handlers = {t["name"]: make_mcp_handler(t["name"]) for t in MCP_TOOLS}
+
 TOOL_HANDLERS = {
     "bash":             lambda **kw: run_bash(kw["command"]),
     "read_file":        lambda **kw: run_read(kw["path"], kw.get("limit")),
@@ -596,6 +613,8 @@ TOOL_HANDLERS = {
     "idle":             lambda **kw: "Lead does not idle.",
     "claim_task":       lambda **kw: TASK_MGR.claim(kw["task_id"], "lead"),
 }
+# 合并 MCP 工具处理器
+TOOL_HANDLERS.update(mcp_handlers)
 
 TOOLS = [
     {"name": "bash", "description": "Run a shell command.",
@@ -646,6 +665,9 @@ TOOLS = [
      "input_schema": {"type": "object", "properties": {"task_id": {"type": "integer"}}, "required": ["task_id"]}},
 ]
 
+# 动态添加 MCP 工具
+ALL_TOOLS = TOOLS + MCP_TOOLS
+
 
 # === SECTION: agent_loop ===
 def agent_loop(messages: list):
@@ -670,7 +692,7 @@ def agent_loop(messages: list):
         # LLM call
         response = client.messages.create(
             model=MODEL, system=SYSTEM, messages=messages,
-            tools=TOOLS, max_tokens=8000,
+            tools=ALL_TOOLS, max_tokens=8000,
         )
         messages.append({"role": "assistant", "content": response.content})
         if response.stop_reason != "tool_use":
