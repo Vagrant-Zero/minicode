@@ -42,6 +42,29 @@ The agent runs in a loop:
 | `grep` | Search files with regex |
 | `bash` | Run shell command |
 
+## MCP Support
+
+`minicode` supports [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) servers to extend available tools.
+
+### Configuration
+
+Create `mcp_servers.json` in the project directory:
+
+```json
+{
+  "mcpServers": {
+    "server-name": {
+      "command": "uvx",
+      "args": ["mcp-server-name"]
+    }
+  }
+}
+```
+
+### Tool Naming
+
+MCP tools are prefixed with their server name: `{server_name}_{tool_name}`
+
 ## Configuration
 
 ### Environment Variables
